@@ -1,60 +1,64 @@
-from flask import Flask, request, render_template, redirect
+from flask import Flask, render_template, request, redirect
 import json
+import os
 
 app = Flask(__name__)
 
+# ✅ users.json 파일 없으면 자동 생성
+if not os.path.exists("users.json"):
+    with open("users.json", "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False, indent=2)
+
+def load_users():
+    with open("users.json", "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_users(users):
+    with open("users.json", "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
 @app.route("/", methods=["GET", "POST"])
 def index():
-    with open("users.json", "r", encoding="utf-8") as f:
-        users = json.load(f)
-
+    users = load_users()
     if request.method == "POST":
-        new_entry = {
-            "user": request.form["user"],
-            "chat_id": request.form["chat_id"],
-            "telegram_token": request.form["telegram_token"],
-            "keywords": [request.form["keyword"]]
-        }
+        name = request.form["user"]
+        chat_id = request.form["chat_id"]
+        token = request.form["telegram_token"]
+        keyword = request.form["keyword"]
 
-        for u in users:
-            if u["user"] == new_entry["user"] and u["chat_id"] == new_entry["chat_id"]:
-                if request.form["keyword"] not in u["keywords"]:
-                    u["keywords"].append(request.form["keyword"])
-                break
-        else:
-            users.append(new_entry)
+        for user in users:
+            if user["name"] == name and user["chat_id"] == chat_id:
+                if keyword not in user["keywords"]:
+                    user["keywords"].append(keyword)
+                save_users(users)
+                return redirect("/")
 
-        with open("users.json", "w", encoding="utf-8") as f:
-            json.dump(users, f, ensure_ascii=False, indent=2)
-
+        users.append({
+            "name": name,
+            "chat_id": chat_id,
+            "telegram_token": token,
+            "keywords": [keyword]
+        })
+        save_users(users)
+        return redirect("/")
     return render_template("index.html", users=users)
 
 @app.route("/delete", methods=["POST"])
 def delete():
-    with open("users.json", "r", encoding="utf-8") as f:
-        users = json.load(f)
+    user_name = request.form["user"]
+    keyword = request.form["keyword"]
 
-    for u in users:
-        if u["user"] == request.form["user"]:
-            u["keywords"] = [k for k in u["keywords"] if k != request.form["keyword"]]
-            break
-
-    with open("users.json", "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
-
+    users = load_users()
+    for user in users:
+        if user["name"] == user_name and keyword in user["keywords"]:
+            user["keywords"].remove(keyword)
+    save_users(users)
     return redirect("/")
 
-@app.route("/settings", methods=["GET", "POST"])
+@app.route("/settings")
 def settings():
-    with open("config.json", "r", encoding="utf-8") as f:
-        config = json.load(f)
-
-    if request.method == "POST":
-        config["interval"] = int(request.form["interval"])
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-
-    return render_template("settings.html", config=config)
+    return render_template("settings.html")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=False)
+
